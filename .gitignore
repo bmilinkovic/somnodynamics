@@ -35,3 +35,6 @@ code/legacy/test/**/*.png
 code/legacy/test/**/*.svg
 code/legacy/test/**/*.pdf
 code/legacy/test/statistical_results/*.csv
+
+# Generated legacy exploratory test outputs
+code/legacy/test/
