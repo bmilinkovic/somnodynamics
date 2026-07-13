@@ -1,0 +1,37 @@
+# OS/editor
+.DS_Store
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Analysis outputs and large artifacts
+results/
+data/
+*.fif
+*.edf
+*.mat
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.pkl
+*.joblib
+*.zip
+*.tar
+*.gz
+
+# Logs/caches
+*.log
+tmp/
+cache/
+
+# Generated legacy figures/artifacts kept out of the code repository
+code/legacy/ssdi_analysis/figs/*.svg
+code/legacy/ssdi_analysis/figs/*.png
+code/legacy/ssdi_analysis/composite_figures_time_domain/*.png
+code/legacy/test/**/*.png
+code/legacy/test/**/*.svg
+code/legacy/test/**/*.pdf
+code/legacy/test/statistical_results/*.csv

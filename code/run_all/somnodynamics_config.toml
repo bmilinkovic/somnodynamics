@@ -1,0 +1,35 @@
+project_name = "SomnoDynamics"
+external_data_root = "/Volumes/ex_data/data_somnoemergence"
+raw_data_root = "/Volumes/ex_data/data_somnoemergence/raw"
+montage_file = "/Volumes/ex_data/data_somnoemergence/raw/Co-registered_average_positions.pos"
+artifact_matrix_dir = "/Volumes/ex_data/data_somnoemergence/raw/artifact_matrix"
+
+[stage_label_aliases]
+W = "W_"
+W_ = "W_"
+N1 = "N1"
+N2 = "N2"
+N3 = "N3"
+R = "R_"
+R_ = "R_"
+REM = "R_"
+
+[stage_labels]
+W_ = "Wake"
+N1 = "N1"
+N2 = "N2"
+N3 = "N3"
+R_ = "REM"
+
+[paths]
+results_root = "results"
+legacy_root = "code/legacy"
+preprocessed_sensor_space = "results/preprocessing/preprocessed_sensor_space"
+source_recon_anatomical46 = "results/source_recon/anatomical46"
+source_recon_anatomical7 = "results/source_recon/anatomical7"
+gc_root = "results/gc"
+ssdi_root = "results/ssdi"
+sensor_power_root = "results/sensor_power"
+stats_root = "results/stats"
+figures_root = "results/figures"
+cross_analysis_root = "results/cross_analysis"
