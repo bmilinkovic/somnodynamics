@@ -28,8 +28,23 @@ mkdir -p "${MPLCONFIGDIR}" "${SOMNO_REPO}/hpc/logs"
 cd "${SOMNO_REPO}"
 
 if command -v module >/dev/null 2>&1; then
-  module load matlab 2>/dev/null || true
-  module load anaconda/3.11 2>/dev/null || true
+  # Cluster module names vary. Try common MATLAB spellings quietly; users can
+  # always override with: export MATLAB_BIN=/full/path/to/matlab
+  module load anaconda/3.11 >/dev/null 2>&1 || true
+  for matlab_module in \
+    matlab \
+    MATLAB \
+    matlab/R2023b \
+    MATLAB/R2023b \
+    matlab/2023b \
+    MATLAB/2023b \
+    matlab/R2024a \
+    MATLAB/R2024a \
+    matlab/2024a \
+    MATLAB/2024a
+  do
+    module load "${matlab_module}" >/dev/null 2>&1 && break || true
+  done
 fi
 
 if [ -f "${HOME}/miniconda3/etc/profile.d/conda.sh" ]; then
