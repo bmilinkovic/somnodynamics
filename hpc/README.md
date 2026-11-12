@@ -26,18 +26,21 @@ results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz/model_inputs
 
 ## Fit locally, then transfer compact models
 
-On the local computer, the full LRT/LWR fitting loop is:
+On the local computer, the full LRT/LWR fitting loop can use a small parallel
+pool:
 
 ```bash
 cd /Users/borjan/code/somnodynamics
-bash code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/fit_all_python_var_dk68.sh
+python -u code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/fit_parallel_python_var_dk68.py --max-workers 3
 ```
 
 It reads the 143 DK68 source recordings from
 `/Volumes/ex_data/data_somnoemergence`, fits with the unchanged
 `multiscale.fit_var_auto` routine, and saves one compact `*_var_model.npz`
-per subject-stage. It uses one process and one numerical thread at a time;
-rerunning the loop skips completed files. The model directory is:
+per subject-stage. Each process uses one numerical thread; the pool fits small
+recordings together and gives larger recordings more RAM. Rerunning the queue
+skips completed files. For a strictly serial run, use
+`fit_all_python_var_dk68.sh`. The model directory is:
 
 ```text
 /Volumes/ex_data/data_somnoemergence/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz/model_inputs
