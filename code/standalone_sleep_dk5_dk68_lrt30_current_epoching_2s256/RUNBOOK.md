@@ -27,12 +27,21 @@ addpath('code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi');
 run_ssdi_sleep_stage_pipeline_dk('mode','stage_ssdi','atlas','dk5','nrunsp',100,'nitersp',10000,'niterso',10000);
 ```
 
-## 5) SSDI analysis B (DK68)
-```matlab
-% Requires GC subject-measures from DK68 branch first:
-run_gc_sleep_stage_pipeline_dk5('mode','stage_mvgc2','atlas','dk68','momax',30,'mosel','LRT','fs_original',256,'fs_target',256,'fres',256);
-run_ssdi_sleep_stage_pipeline_dk('mode','stage_ssdi','atlas','dk68','nrunsp',100,'nitersp',10000,'niterso',10000);
+## 5) DD analysis B (DK68, Python)
+
+The source reconstructed DK68 epoch files are the only inputs. The runner
+fits its own LRT/LWR VAR model, then searches delta, theta, alpha, sigma and
+beta bands for macro dimensions 1–10. The full HPC submission is described in
+[`hpc/README.md`](../../hpc/README.md). For one local subject-stage file:
+
+```bash
+python code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/run_python_dd_dk68.py \
+  --subject EPCTL01 --stage W_ --workers 4
 ```
+
+The Python output root is
+`$SOMNODYNAMICS_DATA_ROOT/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz`.
+The old MATLAB route is preserved in its legacy submitter.
 
 ## 6) SSDI summaries/figures
 ```bash

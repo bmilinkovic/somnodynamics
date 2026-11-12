@@ -30,10 +30,11 @@ fi
 conda activate "${ENV_PREFIX}"
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install numpy scipy pandas matplotlib seaborn statsmodels mne h5py pymatreader
+python -m pip install "${SOMNO_REPO:-$(pwd)}/code/external/emergence-multiscale"
 python - <<'PY'
 import sys
 print(sys.version)
-for mod in ("numpy", "scipy", "pandas", "matplotlib", "mne", "h5py"):
+for mod in ("numpy", "scipy", "pandas", "matplotlib", "mne", "h5py", "multiscale"):
     m = __import__(mod)
     print(mod, getattr(m, "__version__", "unknown"))
 PY

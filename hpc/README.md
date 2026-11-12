@@ -39,25 +39,38 @@ For the current DK5/DK68 LRT30 branch:
 ```bash
 sbatch hpc/submit_gc_dk5_lrt30.sh
 sbatch hpc/submit_ssdi_dk5_lrt30.sh
-sbatch hpc/submit_ssdi_dk68_model_inputs_lrt30.sh
-sbatch hpc/submit_ssdi_dk68_lrt30.sh
 ```
 
-For the two DK68 SSDI jobs, submit them with a Slurm dependency so SSDI starts
-only after all 143 model inputs are present. Run from the repository root:
+DK68 DD now runs directly from source reconstructed epochs using the vendored
+Emergence Engine Python package. No MATLAB model-input or SSDI job is needed
+for this branch. After transferring the repository and source data to the
+cluster, run `bash hpc/create_conda_env.sh` once, then submit from the
+repository root:
 
 ```bash
-model_job=$(sbatch --parsable hpc/submit_ssdi_dk68_model_inputs_lrt30.sh)
-ssdi_job=$(sbatch --parsable --dependency=afterok:${model_job} hpc/submit_ssdi_dk68_lrt30.sh)
-echo "DK68 model inputs: ${model_job}; DK68 SSDI: ${ssdi_job}"
-squeue -j "${model_job},${ssdi_job}"
+mkdir -p hpc/logs
+dd_job=$(sbatch --parsable hpc/submit_ssdi_dk68_lrt30.sh)
+summary_job=$(sbatch --parsable --dependency=afterok:${dd_job} hpc/submit_ssdi_dk68_python_summary.sh)
+echo "DK68 DD array: ${dd_job}; summary: ${summary_job}"
+squeue -j "${dd_job},${summary_job}"
 ```
 
-The model-input job checks for 143 output files before exiting successfully.
-The SSDI job checks for 143 model inputs before starting and 143 spectral results
-before building summaries and figures. Both scripts use `recompute=false`, so a
-resubmission skips existing subject-stage outputs. Review `hpc/logs/%x-%j.out`
-and `hpc/logs/%x-%j.err` for the Slurm job IDs returned above.
+The array has 143 zero-based tasks and runs up to four tasks concurrently by
+default. Each task fits one subject-stage VAR model and optimises its 50
+dimension × band blocks. The runner checks that all 143 source files are
+present before starting and skips existing Python result files on resubmission.
+If a task stops part-way through, it reuses its fitted VAR model and finished
+dimension–band checkpoints on the next submission.
+The summary job starts only after the array succeeds and checks for 143
+results. Logs in `hpc/logs/` show the VAR order and progress through the DD
+blocks. To use one node at a time, submit with `sbatch --array=0-142%1 ...`.
+
+Python results are separate from the MATLAB archive under
+`$SOMNODYNAMICS_DATA_ROOT/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz`.
+Each stage has the same `*_ssdi_spectral_domain_results.mat` layout consumed
+by the existing summary and figure scripts. The old MATLAB submitter is
+`submit_ssdi_dk68_matlab_legacy.sh`; the MATLAB model-input submitter remains
+available for historical comparison.
 
 DK68 GC is provided but is not part of the currently preferred local branch:
 
@@ -67,21 +80,20 @@ sbatch hpc/submit_gc_dk68_lrt30.sh
 
 ## Resource Logic
 
-- DK68 model input fitting is the memory-heavy VAR/LRT stage.
-- The DK68 jobs request a high-memory exclusive node, matching the aggressive
-  style used in the TVBToolkit scripts.
-- DK68 model input fitting defaults to `DK68_MODEL_INPUT_WORKERS=$SLURM_CPUS_PER_TASK`.
-- DK68 SSDI defaults to `SSDI_MAX_WORKERS=$SLURM_CPUS_PER_TASK`.
-- Each MATLAB worker is kept to one computational thread by default. That is
-  not conservative; it is the realistic way to use a full node without nested
-  BLAS oversubscription turning 64 workers into hundreds of fighting threads.
-- All heavy scripts use `recompute=false`, so completed subject-stage files are
-  skipped when jobs are resumed.
+- Each Python DD array task requests a high-memory exclusive node. The 50
+  independent dimension × band blocks can use up to 50 Python worker processes.
+- `SSDI_MAX_WORKERS` limits processes per array task; BLAS/OpenMP threads are
+  capped at one to avoid oversubscription.
+- LRT/LWR VAR fitting occurs once per subject-stage file. The proxy and
+  canonical spectral optimisers then run for every requested block.
+- DK68 with 100 restarts and 10,000 iterations per stage is computationally
+  substantial. Start with one array task and inspect its runtime before
+  releasing the full array if your allocation is limited.
 
 ## Current Analysis Parameters
 
 - Epoching/source data: current 2 s, 256 Hz source-reconstructed branch.
 - GC/VAR model selection: `momax=30`, `mosel=LRT`.
-- SSDI: canonical SomnoDynamics/DMT-faithful spectral SSDI.
-- DK68 SSDI macro dimensions: configured in MATLAB as `m=1:10`.
+- SSDI: Emergence Engine proxy followed by canonical spectral DD.
+- DK68 macro dimensions: `m=1:10`.
 - Frequency bands: delta, theta, alpha, sigma, beta; no gamma.

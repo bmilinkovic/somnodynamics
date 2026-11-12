@@ -75,11 +75,6 @@ if command -v python >/dev/null 2>&1; then
   python --version
   which python
 fi
-command -v "${MATLAB_BIN}" >/dev/null 2>&1 || {
-  echo "ERROR: MATLAB_BIN not found: ${MATLAB_BIN}" >&2
-  exit 2
-}
-
 require_somno_data_root() {
   if [ ! -d "${SOMNODYNAMICS_DATA_ROOT}/results" ]; then
     echo "ERROR: expected SomnoDynamics data root with results/:" >&2
@@ -91,5 +86,9 @@ require_somno_data_root() {
 
 run_matlab_batch() {
   local code="$1"
+  command -v "${MATLAB_BIN}" >/dev/null 2>&1 || {
+    echo "ERROR: MATLAB_BIN not found: ${MATLAB_BIN}" >&2
+    return 2
+  }
   "${MATLAB_BIN}" -batch "maxNumCompThreads(str2double(getenv('MATLAB_NUM_THREADS'))); ${code}"
 }

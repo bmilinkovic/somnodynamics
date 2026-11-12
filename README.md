@@ -74,7 +74,10 @@ python3 code/run_all/run_pipeline.py source_recon
 python3 code/run_all/run_pipeline.py all --skip-matlab
 ```
 
-For MATLAB stages (`gc`, `ssdi`), SomnoDynamics auto-initializes vendored MVGC2 and available SSDI toolboxes.
+The DK68 stage-wise DD run uses the vendored Emergence Engine Python package
+from source reconstructed epochs. Its HPC array and dependent summary job are
+documented in [hpc/README.md](hpc/README.md). The DK5 and legacy GC/SSDI
+paths still use MATLAB and initialise the existing toolboxes.
 
 ## Key Docs
 
