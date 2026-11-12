@@ -43,6 +43,22 @@ sbatch hpc/submit_ssdi_dk68_model_inputs_lrt30.sh
 sbatch hpc/submit_ssdi_dk68_lrt30.sh
 ```
 
+For the two DK68 SSDI jobs, submit them with a Slurm dependency so SSDI starts
+only after all 143 model inputs are present. Run from the repository root:
+
+```bash
+model_job=$(sbatch --parsable hpc/submit_ssdi_dk68_model_inputs_lrt30.sh)
+ssdi_job=$(sbatch --parsable --dependency=afterok:${model_job} hpc/submit_ssdi_dk68_lrt30.sh)
+echo "DK68 model inputs: ${model_job}; DK68 SSDI: ${ssdi_job}"
+squeue -j "${model_job},${ssdi_job}"
+```
+
+The model-input job checks for 143 output files before exiting successfully.
+The SSDI job checks for 143 model inputs before starting and 143 spectral results
+before building summaries and figures. Both scripts use `recompute=false`, so a
+resubmission skips existing subject-stage outputs. Review `hpc/logs/%x-%j.out`
+and `hpc/logs/%x-%j.err` for the Slurm job IDs returned above.
+
 DK68 GC is provided but is not part of the currently preferred local branch:
 
 ```bash

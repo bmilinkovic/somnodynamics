@@ -27,6 +27,14 @@ fi
 
 run_matlab_batch "addpath('code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi'); run_ssdi_sleep_stage_pipeline_dk('mode','stage_ssdi','atlas','dk68','recompute',false,'parallel_enable',true,'parallel_workers',${SSDI_MAX_WORKERS},'nrunsp',100,'nitersp',10000,'niterso',10000);"
 
+SSDI_DIR="${SOMNODYNAMICS_DATA_ROOT}/results/ssdi/stage_ssdi_dk68_lrt30_current_epoching_2s_256hz"
+SSDI_COUNT="$(find "${SSDI_DIR}" -name '*_ssdi_spectral_domain_results.mat' -type f | wc -l | tr -d ' ')"
+if [ "${SSDI_COUNT}" -ne 143 ]; then
+  echo "ERROR: DK68 SSDI results incomplete: ${SSDI_COUNT}/143." >&2
+  exit 9
+fi
+echo "DK68 SSDI results complete: ${SSDI_COUNT}/143."
+
 python code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/summarize_ssdi_results_dk.py \
   --spectral-dir "${SOMNODYNAMICS_DATA_ROOT}/results/ssdi/stage_ssdi_dk68_lrt30_current_epoching_2s_256hz" \
   --out-dir "${SOMNODYNAMICS_DATA_ROOT}/results/ssdi/stage_ssdi_dk68_lrt30_current_epoching_2s_256hz"

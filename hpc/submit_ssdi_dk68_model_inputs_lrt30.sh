@@ -27,3 +27,11 @@ else
 fi
 
 run_matlab_batch "addpath('code/run_all'); addpath('code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/stage_ssdi_dk68'); prepare_dk68_ssdi_model_inputs('parallel_enable',${PARALLEL_ENABLE},'parallel_workers',${WORKERS},'recompute',false,'momax',30,'mosel','LRT');"
+
+MODEL_DIR="${SOMNODYNAMICS_DATA_ROOT}/results/ssdi/stage_ssdi_dk68_lrt30_current_epoching_2s_256hz/model_inputs/subject_measures"
+MODEL_COUNT="$(find "${MODEL_DIR}" -name '*_subject_measures.mat' -type f | wc -l | tr -d ' ')"
+if [ "${MODEL_COUNT}" -ne 143 ]; then
+  echo "ERROR: DK68 SSDI model inputs incomplete: ${MODEL_COUNT}/143." >&2
+  exit 8
+fi
+echo "DK68 SSDI model inputs complete: ${MODEL_COUNT}/143."
