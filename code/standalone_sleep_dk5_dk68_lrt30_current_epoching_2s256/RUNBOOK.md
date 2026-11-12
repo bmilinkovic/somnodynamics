@@ -29,15 +29,17 @@ run_ssdi_sleep_stage_pipeline_dk('mode','stage_ssdi','atlas','dk5','nrunsp',100,
 
 ## 5) DD analysis B (DK68, Python)
 
-The source reconstructed DK68 epoch files are the only inputs. The runner
-fits its own LRT/LWR VAR model, then searches delta, theta, alpha, sigma and
-beta bands for macro dimensions 1–10. The full HPC submission is described in
-[`hpc/README.md`](../../hpc/README.md). For one local subject-stage file:
+First fit the source reconstructed DK68 epochs locally with Emergence Engine's
+full LRT/LWR routine. This saves only selected `A`, `V`, order and metadata:
 
 ```bash
-python code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/run_python_dd_dk68.py \
-  --subject EPCTL01 --stage W_ --workers 4
+bash code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/fit_all_python_var_dk68.sh
 ```
+
+Transfer the `model_inputs` directory to the HPC. The DD runner then reads
+those models and searches delta, theta, alpha, sigma and beta bands for macro
+dimensions 1–10. The full HPC submission is described in
+[`hpc/README.md`](../../hpc/README.md).
 
 The Python output root is
 `$SOMNODYNAMICS_DATA_ROOT/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz`.

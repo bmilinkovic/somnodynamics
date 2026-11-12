@@ -11,18 +11,41 @@ machine:
 
 ```bash
 export SOMNO_REPO=/home/bmilinkovic/somnodynamics
-export SOMNODYNAMICS_DATA_ROOT=/path/to/data_somnoemergence
-export MATLAB_BIN=matlab
+export SOMNODYNAMICS_DATA_ROOT=/scratch/bmilinkovic/data_somnoemergence
 export SOMNO_CONDA_ENV=somnodynamics
 ```
 
-`SOMNODYNAMICS_DATA_ROOT` must contain the transferred external-drive-style
-layout, including:
+Use your actual allocated project or scratch path for
+`SOMNODYNAMICS_DATA_ROOT`. `MATLAB_BIN` is only needed for legacy jobs.
+
+`SOMNODYNAMICS_DATA_ROOT` must contain the compact DK68 fitted models:
 
 ```text
-results/source_recon/dk5_dk68_lcmv_nai_current_epoching_2s_256hz/dk5
-results/source_recon/dk5_dk68_lcmv_nai_current_epoching_2s_256hz/dk68
+results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz/model_inputs
 ```
+
+## Fit locally, then transfer compact models
+
+On the local computer, the full LRT/LWR fitting loop is:
+
+```bash
+cd /Users/borjan/code/somnodynamics
+bash code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/fit_all_python_var_dk68.sh
+```
+
+It reads the 143 DK68 source recordings from
+`/Volumes/ex_data/data_somnoemergence`, fits with the unchanged
+`multiscale.fit_var_auto` routine, and saves one compact `*_var_model.npz`
+per subject-stage. It uses one process and one numerical thread at a time;
+rerunning the loop skips completed files. The model directory is:
+
+```text
+/Volumes/ex_data/data_somnoemergence/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz/model_inputs
+```
+
+Once all 143 files are ready, copy that directory to the matching location
+under your HPC data root with `rsync -avP` over SSH. The source recordings
+stay on the local machine. The HPC Slurm array uses only the compact models.
 
 ## Smoke Test
 
@@ -32,8 +55,8 @@ Run on the login node after transfer:
 bash hpc/smoke_test_login.sh
 ```
 
-This checks the Python DK68 route and requires all 143 DK68 source files.
-DK5 data are optional for this run. Pass `--matlab` to also check the legacy
+This checks the Python DK68 route and requires all 143 compact VAR models.
+The source recordings stay on the local computer. Pass `--matlab` to also check the legacy
 MATLAB toolbox setup.
 
 ## Submit Order
@@ -45,9 +68,9 @@ sbatch hpc/submit_gc_dk5_lrt30.sh
 sbatch hpc/submit_ssdi_dk5_lrt30.sh
 ```
 
-DK68 DD now runs directly from source reconstructed epochs using the vendored
+DK68 DD now runs from locally fitted VAR models using the vendored
 Emergence Engine Python package. No MATLAB model-input or SSDI job is needed
-for this branch. After transferring the repository and source data to the
+for this branch. After transferring the repository and compact models to the
 cluster, run `bash hpc/create_conda_env.sh` once, then submit from the
 repository root:
 
@@ -69,8 +92,8 @@ squeue -j "${dd_job},${summary_job}"
 ```
 
 The array has 143 zero-based tasks and runs up to four tasks concurrently by
-default. Each task fits one subject-stage VAR model and optimises its 50
-dimension × band blocks. The runner checks that all 143 source files are
+default. Each task loads one subject-stage VAR model and optimises its 50
+dimension × band blocks. The runner checks that all 143 model files are
 present before starting and skips existing Python result files on resubmission.
 If a task stops part-way through, it reuses its fitted VAR model and finished
 dimension–band checkpoints on the next submission.
@@ -97,8 +120,8 @@ sbatch hpc/submit_gc_dk68_lrt30.sh
   independent dimension × band blocks can use up to 50 Python worker processes.
 - `SSDI_MAX_WORKERS` limits processes per array task; BLAS/OpenMP threads are
   capped at one to avoid oversubscription.
-- LRT/LWR VAR fitting occurs once per subject-stage file. The proxy and
-  canonical spectral optimisers then run for every requested block.
+- LRT/LWR VAR fitting occurs locally before transfer. The proxy and
+  canonical spectral optimisers run on the HPC for every requested block.
 - DK68 with 100 restarts and 10,000 iterations per stage is computationally
   substantial. Start with one array task and inspect its runtime before
   releasing the full array if your allocation is limited.

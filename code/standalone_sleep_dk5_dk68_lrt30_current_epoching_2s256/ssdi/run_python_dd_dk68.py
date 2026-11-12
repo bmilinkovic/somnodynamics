@@ -70,6 +70,22 @@ def discover(source_root: Path) -> list[tuple[str, str, Path]]:
             for subject, stage in sorted(jobs, key=lambda k: (STAGES.index(k[1]), k[0]))]
 
 
+def discover_models(model_root: Path) -> list[tuple[str, str, Path]]:
+    """Find compact models fitted by Emergence Engine on another computer."""
+    jobs = {}
+    for stage in STAGES:
+        for path in (model_root / stage).glob("EPCTL*_var_model.npz"):
+            match = re.fullmatch(r"(EPCTL\d{2})_var_model\.npz", path.name)
+            if match is None:
+                continue
+            key = (match.group(1), stage)
+            if key in jobs:
+                raise ValueError(f"duplicate compact model for {key}")
+            jobs[key] = path
+    return [(subject, stage, jobs[(subject, stage)])
+            for subject, stage in sorted(jobs, key=lambda k: (STAGES.index(k[1]), k[0]))]
+
+
 def pooled_zscore(data: np.ndarray, epsilon: float = 1e-12) -> np.ndarray:
     """MATLAB model-input branch's pooled mean and sample standard deviation."""
     if data.ndim == 2:
@@ -156,6 +172,8 @@ def parse_args() -> argparse.Namespace:
     data_root = Path(os.environ.get("SOMNODYNAMICS_DATA_ROOT", REPO)).expanduser()
     parser.add_argument("--source-root", type=Path, default=data_root /
                         "results/source_recon/dk5_dk68_lcmv_nai_current_epoching_2s_256hz/dk68")
+    parser.add_argument("--model-root", type=Path,
+                        help="Use compact pre-fitted VAR models instead of source recordings")
     parser.add_argument("--output-root", type=Path, default=data_root /
                         "results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz")
     parser.add_argument("--task-index", type=int, help="Zero-based index in the sorted subject-stage manifest")
@@ -209,24 +227,43 @@ def run_one(subject: str, stage: str, source: Path, args: argparse.Namespace,
             shutil.rmtree(checkpoint_dir, ignore_errors=True)
             destination.unlink(missing_ok=True)
         print(f"[{subject} {stage}] loading {source}", flush=True)
-        signals, labels = read_source(source, args.required_regions)
-        if max(args.dimensions) >= signals.shape[0] or min(args.dimensions) < 1:
-            raise ValueError("dimensions must be from 1 to regions-1")
-        model_cache = checkpoint_dir / "model.npz"
-        if model_cache.exists():
-            with np.load(model_cache, allow_pickle=False) as saved:
+        if source.suffix == ".npz":
+            with np.load(source, allow_pickle=False) as saved:
                 a, v, order = saved["A"], saved["V"], int(saved["order"])
-            print(f"[{subject} {stage}] reusing VAR order={order}", flush=True)
+                labels = [str(value) for value in saved["labels"]]
+                if (str(saved["subject"]) != subject or str(saved["stage"]) != stage or
+                        str(saved["criterion"]) != args.criterion or
+                        str(saved["regmode"]) != args.regmode or
+                        int(saved["pmax"]) != args.pmax or
+                        float(saved["fs"]) != args.fs):
+                    raise ValueError(f"{source}: model settings do not match DD run")
+            if a.shape != (args.required_regions, args.required_regions, order):
+                raise ValueError(f"{source}: invalid coefficient shape {a.shape}")
+            if v.shape != (args.required_regions, args.required_regions):
+                raise ValueError(f"{source}: invalid covariance shape {v.shape}")
+            model_source = "python_prefit_var"
         else:
-            print(f"[{subject} {stage}] selecting VAR order (pmax={args.pmax}, "
-                  f"{args.criterion}/{args.regmode})", flush=True)
-            selected = fit_var_auto(signals, pmax=args.pmax, criterion=args.criterion,
-                                    regmode=args.regmode)
-            order = selected.order
-            if order < 1:
-                raise ValueError("selected VAR order zero; DD requires dynamics")
-            a, v = selected.fit.coefficients, selected.fit.covariance
-            atomic_npz(model_cache, A=a, V=v, order=np.asarray(order))
+            signals, labels = read_source(source, args.required_regions)
+            model_cache = checkpoint_dir / "model.npz"
+            if model_cache.exists():
+                with np.load(model_cache, allow_pickle=False) as saved:
+                    a, v, order = saved["A"], saved["V"], int(saved["order"])
+                print(f"[{subject} {stage}] reusing VAR order={order}", flush=True)
+            else:
+                print(f"[{subject} {stage}] selecting VAR order (pmax={args.pmax}, "
+                      f"{args.criterion}/{args.regmode})", flush=True)
+                selected = fit_var_auto(signals, pmax=args.pmax, criterion=args.criterion,
+                                        regmode=args.regmode)
+                order = selected.order
+                if order < 1:
+                    raise ValueError("selected VAR order zero; DD requires dynamics")
+                a, v = selected.fit.coefficients, selected.fit.covariance
+                atomic_npz(model_cache, A=a, V=v, order=np.asarray(order))
+            model_source = f"python_source_recon_var_{args.criterion.lower()}_{args.regmode.lower()}"
+        if order < 1:
+            raise ValueError(f"{subject} {stage}: VAR order zero; DD needs dynamics")
+        if max(args.dimensions) >= a.shape[0] or min(args.dimensions) < 1:
+            raise ValueError("dimensions must be from 1 to regions-1")
         pairs = [(m, band) for m in args.dimensions for band in bands]
         paths = {(m, band): checkpoint_dir / f"{band}_m{m}.npz"
                  for m, band in pairs}
@@ -259,9 +296,9 @@ def run_one(subject: str, stage: str, source: Path, args: argparse.Namespace,
                 "subject_id": subject, "stage": stage,
                 "stage_label": STAGE_LABELS[stage],
                 "labels": np.asarray(labels, dtype=object),
-                "n_regions": signals.shape[0], "morder": order,
+                "n_regions": a.shape[0], "morder": order,
                 "fs": args.fs, "fres": args.fres, "input_file": str(source),
-                "model_source": f"python_source_recon_var_{args.criterion.lower()}_{args.regmode.lower()}",
+                "model_source": model_source,
                 "nrunsp": args.runs, "nitersp": args.pre_iters,
                 "niterso": args.final_iters,
                 "engine": "emergence-multiscale",
@@ -308,12 +345,14 @@ def run_one(subject: str, stage: str, source: Path, args: argparse.Namespace,
 
 def main() -> int:
     args = parse_args()
-    jobs = discover(args.source_root)
+    jobs = discover_models(args.model_root) if args.model_root else discover(args.source_root)
     if args.expected_count is not None and len(jobs) != args.expected_count:
+        root = args.model_root if args.model_root else args.source_root
         raise SystemExit(f"expected {args.expected_count} DK68 files; found {len(jobs)} "
-                         f"in {args.source_root}")
+                         f"in {root}")
     if not jobs:
-        raise SystemExit(f"no DK68 source files in {args.source_root}")
+        root = args.model_root if args.model_root else args.source_root
+        raise SystemExit(f"no DK68 inputs in {root}")
     if args.task_index is not None:
         if not 0 <= args.task_index < len(jobs):
             raise SystemExit(f"task index must be 0..{len(jobs)-1}")

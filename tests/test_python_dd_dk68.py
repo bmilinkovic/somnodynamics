@@ -73,6 +73,23 @@ class PythonDDDK68Tests(unittest.TestCase):
                                           retained.stat().st_mtime_ns))
             self.assertTrue(interrupted.exists())
 
+            compact_root = root / "compact"
+            compact_file = compact_root / "W_/EPCTL01_var_model.npz"
+            MODULE.atomic_npz(
+                compact_file, A=np.asarray(result["model"]["A"]).reshape(3, 3, -1),
+                V=result["model"]["V"],
+                order=np.asarray(result["meta"]["morder"]),
+                labels=np.asarray(labels, dtype=str),
+                subject=np.asarray("EPCTL01"), stage=np.asarray("W_"),
+                fs=np.asarray(64.0), pmax=np.asarray(2),
+                criterion=np.asarray("LRT"), regmode=np.asarray("LWR"))
+            self.assertEqual(len(MODULE.discover_models(compact_root)), 1)
+            args.output_root = root / "prefit_results"
+            prefit = MODULE.run_one("EPCTL01", "W_", compact_file, args, bands)
+            np.testing.assert_allclose(
+                np.asarray(loadmat(prefit, simplify_cells=True)["results"]["delta_dopto_m1"]),
+                original_values, rtol=0, atol=0)
+
 
 if __name__ == "__main__":
     unittest.main()

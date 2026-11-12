@@ -26,7 +26,9 @@ fi
 TASK_INDEX="${SLURM_ARRAY_TASK_ID:?submit this script as a Slurm array}"
 
 echo "DK68 Python DD: task ${TASK_INDEX}/142, ${WORKERS} block workers"
+MODEL_ROOT="${SOMNODYNAMICS_DATA_ROOT}/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz/model_inputs"
 python -u code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/run_python_dd_dk68.py \
+  --model-root "${MODEL_ROOT}" \
   --task-index "${TASK_INDEX}" \
   --expected-count 143 \
   --fs 256 --fres 256 --pmax 30 --criterion LRT --regmode LWR \

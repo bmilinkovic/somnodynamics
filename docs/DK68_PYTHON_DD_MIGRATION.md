@@ -15,28 +15,30 @@ Implementation:
 
 1. Vendor a pinned copy of the standalone emergence-engine multiscale package
    under `code/external`, keeping its licence and provenance.
-2. Add a Python DK68 runner that reads the existing source recon `.mat` files,
-   reproduces pooled z-scoring and VAR LRT/LWR selection, then invokes the
-   packaged proxy-plus-canonical spectral optimisation with the exact DK68
-   grid. Write compatible result fields, selected model metadata and status.
+2. Fit source recordings locally with the packaged full VAR LRT/LWR routine,
+   save compact `A, V` model files, and transfer only those models to the HPC.
+   The Python DK68 runner then invokes the packaged proxy-plus-canonical
+   spectral optimisation with the exact DK68 grid.
 3. Make runs resumable and support one file per Slurm array task. Keep the
    legacy MATLAB files intact as a reference.
-4. Update the HPC environment and submitters so DK68 uses Python from source
-   files through summary/figures, with a separate aggregation job after the
+4. Update the HPC environment and submitters so DK68 uses Python models
+   through summary/figures, with a separate aggregation job after the
    array succeeds. Document the setup and resource expectations.
-5. Verify CLI help, a small synthetic end-to-end run, output compatibility,
-   shell syntax, and clean package import. The full 143-file computation cannot
-   run locally because the external data volume is not mounted.
+5. Verify the full local fit on real source data, a small DD run from a saved
+   model, output compatibility, shell syntax, and clean package import.
 
 ## Implemented workflow
 
 The vendored package is `code/external/emergence-multiscale/`. Its
-`UPSTREAM.md` records the precise source revision. The runner is
-`code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/run_python_dd_dk68.py`.
-It reads `data` or `source_ts` from the original DK68 `.mat` files,
-normalises each region across samples and epochs with the MATLAB branch's
-pooled sample standard deviation, selects a VAR order with LRT (maximum 30)
-using LWR fitting, and passes the resulting `A, V` to Emergence Engine.
+`UPSTREAM.md` records the precise source revision. The local fitting script
+is `fit_python_var_dk68.py` with serial launcher `fit_all_python_var_dk68.sh`
+in the standalone DK68 `ssdi/` directory. It reads `data` or `source_ts`
+from the original DK68 `.mat` files, normalises each region across samples
+and epochs with the MATLAB branch's pooled sample standard deviation, and
+uses the unchanged Emergence Engine `fit_var_auto` routine for LRT model
+selection (maximum 30) and LWR fitting. It saves the selected `A, V`,
+model order, candidate order diagnostics, labels and source provenance.
+The HPC runner is `run_python_dd_dk68.py`; it loads these compact models.
 Every dimension × band block runs the DDx proxy, clustering, then canonical
 spectral DD. Output files include the existing summary scripts' `dopto` and
 `gopto` fields, plus model and optimisation metadata.
@@ -46,7 +48,7 @@ array over 143 subject-stage inputs. `hpc/submit_ssdi_dk68_python_summary.sh`
 builds group tables and figures after all array tasks succeed. Python files
 go to a new output root, so archived MATLAB outputs are untouched. Model and
 dimension–band checkpoints are held under that output root and keyed by source
-file metadata, analysis settings and engine revision, allowing interrupted
+model metadata, analysis settings and engine revision, allowing interrupted
 array tasks to resume without repeating completed blocks.
 
 The transfer-function and CAK calculations in Emergence Engine use exact
@@ -62,9 +64,10 @@ and the figure reader extracted its structure-fragmentation index. The
 vendored package's companion parity and time-changing tests pass. A synthetic
 interruption test confirmed that a finished block and VAR fit are reused while
 the missing block is recomputed.
-The shell scripts pass `bash -n`. The real 143-file dataset is unavailable
-on this machine because the external data volume is not mounted; no real
-DK68 values or MATLAB parity claim is made here. The random-start streams
+The shell scripts pass `bash -n`. The external drive is mounted locally;
+the full 143-file fitting loop has begun. A real DK68 source file (EPCTL06
+N1) fitted at order 15 and produced a 549 KB compact model. A short DD smoke
+run read that model successfully. The random-start streams
 need not be identical to MATLAB's even with the same restart count, so
 compare optimised DD distributions and solutions rather than expecting
 bitwise agreement.
