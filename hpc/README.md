@@ -32,8 +32,9 @@ Run on the login node after transfer:
 bash hpc/smoke_test_login.sh
 ```
 
-This checks the Python DK68 route without MATLAB. Pass `--matlab` to also
-check the legacy MATLAB toolbox setup.
+This checks the Python DK68 route and requires all 143 DK68 source files.
+DK5 data are optional for this run. Pass `--matlab` to also check the legacy
+MATLAB toolbox setup.
 
 ## Submit Order
 
