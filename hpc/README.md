@@ -49,6 +49,15 @@ repository root:
 
 ```bash
 mkdir -p hpc/logs
+sbatch --array=0-0 hpc/submit_ssdi_dk68_lrt30.sh
+```
+
+This first task is a pilot: inspect its log, selected VAR order, memory use
+and wall time. Once it finishes satisfactorily, submit the full array and
+summary:
+
+```bash
+mkdir -p hpc/logs
 dd_job=$(sbatch --parsable hpc/submit_ssdi_dk68_lrt30.sh)
 summary_job=$(sbatch --parsable --dependency=afterok:${dd_job} hpc/submit_ssdi_dk68_python_summary.sh)
 echo "DK68 DD array: ${dd_job}; summary: ${summary_job}"
