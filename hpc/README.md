@@ -46,6 +46,14 @@ rerunning the loop skips completed files. The model directory is:
 Once all 143 files are ready, copy that directory to the matching location
 under your HPC data root with `rsync -avP` over SSH. The source recordings
 stay on the local machine. The HPC Slurm array uses only the compact models.
+Before transfer, run this check on the local computer:
+
+```bash
+python code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/verify_python_var_dk68.py
+```
+
+It checks the expected subject-stage set, model dimensions, finite parameters,
+positive-definite residual covariance, fit settings, and source provenance.
 
 ## Smoke Test
 
