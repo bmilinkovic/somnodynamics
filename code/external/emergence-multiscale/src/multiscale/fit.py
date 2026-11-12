@@ -44,6 +44,30 @@ def _demean(x):
     return x-np.mean(x, axis=(1, 2), keepdims=True)
 
 
+def _lwr_prediction_errors(x, af, ab, p1n, k):
+    """Form Morf forward and backward errors without a full lag tensor."""
+    n, m, trials = x.shape
+    kn = k*n
+    effective = trials*(m-k)
+    ef = np.empty((n, effective))
+    eb = np.empty((n, effective))
+    for start in range(0, trials, 16):
+        stop = min(trials, start+16)
+        width = (m-k)*(stop-start)
+        forward = np.empty((kn, width))
+        backward = np.empty((kn, width))
+        for lag in range(k):
+            rows = slice(lag*n, (lag+1)*n)
+            forward[rows] = x[:, k-lag:m-lag, start:stop].reshape(
+                n, width, order="F")
+            backward[rows] = x[:, k-1-lag:m-1-lag, start:stop].reshape(
+                n, width, order="F")
+        columns = slice((m-k)*start, (m-k)*stop)
+        ef[:, columns] = af[:, :kn] @ forward
+        eb[:, columns] = ab[:, p1n-kn:] @ backward
+    return ef, eb
+
+
 def tsdata_to_var(x, p, regmode="LWR"):
     """Fit MVGC2's Morf LWR or QR-based OLS VAR model.
 
@@ -97,28 +121,11 @@ def tsdata_to_var(x, p, regmode="LWR"):
     k = 1
     while k <= p:
         kn = k*n
-        effective = trials*(m-k)
         # Build the exact MATLAB lag-stack columns in small groups of trials.
         # The former four-dimensional XX array repeated every observation
         # p+1 times, which exceeded RAM for long recordings. Each block has
         # the same node/lag/time/trial ordering as XX's Fortran reshape.
-        ef = np.empty((n, effective))
-        eb = np.empty((n, effective))
-        trials_per_block = max(1, min(trials, 16))
-        for start in range(0, trials, trials_per_block):
-            stop = min(trials, start+trials_per_block)
-            width = (m-k)*(stop-start)
-            forward = np.empty((kn, width))
-            backward = np.empty((kn, width))
-            for lag in range(k):
-                rows = slice(lag*n, (lag+1)*n)
-                forward[rows] = x[:, k-lag:m-lag, start:stop].reshape(
-                    n, width, order="F")
-                backward[rows] = x[:, k-1-lag:m-1-lag, start:stop].reshape(
-                    n, width, order="F")
-            columns = slice((m-k)*start, (m-k)*stop)
-            ef[:, columns] = af[:, :kn] @ forward
-            eb[:, columns] = ab[:, p1n-kn:] @ backward
+        ef, eb = _lwr_prediction_errors(x, af, ab, p1n, k)
         cf = cholesky(ef @ ef.T, lower=True)
         cb = cholesky(eb @ eb.T, lower=True)
         reflection = solve_triangular(cf, ef, lower=True) @ solve_triangular(cb, eb, lower=True).T
@@ -138,6 +145,43 @@ def tsdata_to_var(x, p, regmode="LWR"):
     v = e @ e.T/(effective-1)
     residuals = e.reshape(n, m-p, trials, order="F")
     return VARFit(coefficients, v, residuals)
+
+
+def _lwr_loglikelihoods(x, pmax):
+    """Compute every LWR order in one recursion, as MVGC2 does."""
+    x = _demean(np.asarray(x, float))
+    n, m, trials = x.shape
+    p1n = (pmax+1)*n
+    ee = x.transpose(0, 1, 2).reshape(n, trials*m, order="F")
+    c = cholesky(ee @ ee.T, lower=True)
+    ic = np.linalg.inv(c)
+    af = np.zeros((n, p1n))
+    ab = np.zeros((n, p1n))
+    af[:, :n] = ic
+    ab[:, -n:] = ic
+    eye = np.eye(n)
+    likelihood = np.empty(pmax)
+    for order in range(1, pmax+1):
+        kn = order*n
+        ef, eb = _lwr_prediction_errors(x, af, ab, p1n, order)
+        cf = cholesky(ef @ ef.T, lower=True)
+        cb = cholesky(eb @ eb.T, lower=True)
+        reflection = solve_triangular(cf, ef, lower=True) @ solve_triangular(
+            cb, eb, lower=True).T
+        next_kn = (order+1)*n
+        previous_f = af[:, :next_kn].copy()
+        previous_b = ab[:, p1n-next_kn:].copy()
+        scale_f = cholesky(eye-reflection @ reflection.T, lower=True)
+        scale_b = cholesky(eye-reflection.T @ reflection, lower=True)
+        af[:, :next_kn] = solve_triangular(
+            scale_f, previous_f-reflection @ previous_b, lower=True)
+        ab[:, p1n-next_kn:] = solve_triangular(
+            scale_b, previous_b-reflection.T @ previous_f, lower=True)
+        e = np.linalg.solve(af[:, :n], ef)
+        effective = trials*(m-order-1)
+        covariance_ml = e @ e.T/effective
+        likelihood[order-1] = -np.linalg.slogdet(covariance_ml)[1]/2
+    return likelihood
 
 
 def tsdata_to_varmo(x, pmax, regmode="LWR", alpha=0.01):
@@ -163,15 +207,19 @@ def tsdata_to_varmo(x, pmax, regmode="LWR", alpha=0.01):
     cov0 = centred @ centred.T/(m*trials)
     likelihood[0] = -np.linalg.slogdet(cov0)[1]/2
     sizes[0] = m*trials
-    for p in range(1, pmax+1):
-        fit = tsdata_to_var(x, p, regmode)
-        # LWR tsdata_to_varll.m advances k/M before evaluating order-p
-        # residuals; OLS uses the ordinary N*(m-p) effective sample size.
-        size = trials*(m-p-1 if mode == "LWR" else m-p)
-        sizes[p] = size
-        covariance_ml = fit.residuals.reshape(n, -1, order="F")
-        covariance_ml = covariance_ml @ covariance_ml.T/size
-        likelihood[p] = -np.linalg.slogdet(covariance_ml)[1]/2
+    if mode == "LWR":
+        # MATLAB tsdata_to_varll advances one Morf recursion through pmax.
+        # Each order's covariance uses the loop's post-increment sample size.
+        sizes[1:] = trials*(m-np.arange(1, pmax+1)-1)
+        likelihood[1:] = _lwr_loglikelihoods(x, pmax)
+    else:
+        for p in range(1, pmax+1):
+            fit = tsdata_to_var(x, p, regmode)
+            size = trials*(m-p)
+            sizes[p] = size
+            covariance_ml = fit.residuals.reshape(n, -1, order="F")
+            covariance_ml = covariance_ml @ covariance_ml.T/size
+            likelihood[p] = -np.linalg.slogdet(covariance_ml)[1]/2
     ratio = parameters/sizes
     aic = -2*likelihood+2*ratio
     bic = -2*likelihood+ratio*np.log(sizes)
