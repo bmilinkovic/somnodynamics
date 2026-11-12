@@ -86,9 +86,6 @@ def tsdata_to_var(x, p, regmode="LWR"):
         return VARFit(coefficients, v, e.reshape(n, m-p, trials, order="F"))
     p1 = p+1
     p1n = p1*n
-    xx = np.zeros((p1, n, m+p, trials))
-    for lag in range(p1):
-        xx[lag, :, lag:lag+m, :] = x
     ee = x.transpose(0, 1, 2).reshape(n, trials*m, order="F")
     c = cholesky(ee @ ee.T, lower=True)
     ic = np.linalg.inv(c)
@@ -101,9 +98,27 @@ def tsdata_to_var(x, p, regmode="LWR"):
     while k <= p:
         kn = k*n
         effective = trials*(m-k)
-        # MATLAB reshape(XX(:,1:k,k+1:m,:), k*n, M): node index is fastest.
-        ef = af[:, :kn] @ xx[:k, :, k:m, :].transpose(1, 0, 2, 3).reshape(kn, effective, order="F")
-        eb = ab[:, p1n-kn:] @ xx[:k, :, k-1:m-1, :].transpose(1, 0, 2, 3).reshape(kn, effective, order="F")
+        # Build the exact MATLAB lag-stack columns in small groups of trials.
+        # The former four-dimensional XX array repeated every observation
+        # p+1 times, which exceeded RAM for long recordings. Each block has
+        # the same node/lag/time/trial ordering as XX's Fortran reshape.
+        ef = np.empty((n, effective))
+        eb = np.empty((n, effective))
+        trials_per_block = max(1, min(trials, 16))
+        for start in range(0, trials, trials_per_block):
+            stop = min(trials, start+trials_per_block)
+            width = (m-k)*(stop-start)
+            forward = np.empty((kn, width))
+            backward = np.empty((kn, width))
+            for lag in range(k):
+                rows = slice(lag*n, (lag+1)*n)
+                forward[rows] = x[:, k-lag:m-lag, start:stop].reshape(
+                    n, width, order="F")
+                backward[rows] = x[:, k-1-lag:m-1-lag, start:stop].reshape(
+                    n, width, order="F")
+            columns = slice((m-k)*start, (m-k)*stop)
+            ef[:, columns] = af[:, :kn] @ forward
+            eb[:, columns] = ab[:, p1n-kn:] @ backward
         cf = cholesky(ef @ ef.T, lower=True)
         cb = cholesky(eb @ eb.T, lower=True)
         reflection = solve_triangular(cf, ef, lower=True) @ solve_triangular(cb, eb, lower=True).T
