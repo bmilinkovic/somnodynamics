@@ -127,7 +127,7 @@ sbatch hpc/submit_gc_dk68_lrt30.sh
 
 ## Resource Logic
 
-- Each Python DD array task requests 16 CPUs and 64 GB by default and can
+- Each Python DD array task requests 50 CPUs and 100 GB by default and can
   share a node with other jobs. The 50 independent dimension × band blocks
   use up to the allocated CPU count in Python worker processes.
 - `SSDI_MAX_WORKERS` limits processes per array task; BLAS/OpenMP threads are

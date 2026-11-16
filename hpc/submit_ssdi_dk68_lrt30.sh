@@ -3,8 +3,8 @@
 #SBATCH --partition=workq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=50
+#SBATCH --mem=100G
 #SBATCH --time=14-00:00:00
 #SBATCH --array=0-142%4
 #SBATCH --output=hpc/logs/%x-%A_%a.out
@@ -18,7 +18,7 @@ require_somno_data_root
 export PYTHONPATH="${SOMNO_REPO}/code/external/emergence-multiscale/src:${PYTHONPATH:-}"
 python -c 'from multiscale import fit_var_auto, run_grid_parallel'
 
-WORKERS="${SSDI_MAX_WORKERS:-${SLURM_CPUS_PER_TASK:-16}}"
+WORKERS="${SSDI_MAX_WORKERS:-${SLURM_CPUS_PER_TASK:-50}}"
 if [ "${WORKERS}" -gt 50 ]; then
   WORKERS=50
 fi
