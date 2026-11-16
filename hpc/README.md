@@ -127,10 +127,12 @@ sbatch hpc/submit_gc_dk68_lrt30.sh
 
 ## Resource Logic
 
-- Each Python DD array task requests a high-memory exclusive node. The 50
-  independent dimension × band blocks can use up to 50 Python worker processes.
+- Each Python DD array task requests 16 CPUs and 64 GB by default and can
+  share a node with other jobs. The 50 independent dimension × band blocks
+  use up to the allocated CPU count in Python worker processes.
 - `SSDI_MAX_WORKERS` limits processes per array task; BLAS/OpenMP threads are
-  capped at one to avoid oversubscription.
+  capped at one to avoid oversubscription. A different CPU or memory request
+  can be passed to `sbatch`; the worker default follows `SLURM_CPUS_PER_TASK`.
 - LRT/LWR VAR fitting occurs locally before transfer. The proxy and
   canonical spectral optimisers run on the HPC for every requested block.
 - DK68 with 100 restarts and 10,000 iterations per stage is computationally
