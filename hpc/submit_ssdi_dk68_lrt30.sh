@@ -23,8 +23,12 @@ if [ "${WORKERS}" -gt 50 ]; then
   WORKERS=50
 fi
 TASK_INDEX="${SLURM_ARRAY_TASK_ID:?submit this script as a Slurm array}"
+EXTRA_ARGS=()
+if [ -n "${SSDI_PILOT_BLOCK:-}" ]; then
+  EXTRA_ARGS+=(--pilot-block "${SSDI_PILOT_BLOCK}")
+fi
 
-echo "DK68 Python DD: task ${TASK_INDEX}/142, ${WORKERS} block workers"
+echo "DK68 Python DD: task ${TASK_INDEX}/142, ${WORKERS} start workers per macro-band block"
 MODEL_ROOT="${SOMNODYNAMICS_DATA_ROOT}/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz/model_inputs"
 python -u code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/run_python_dd_dk68.py \
   --model-root "${MODEL_ROOT}" \
@@ -33,4 +37,4 @@ python -u code/standalone_sleep_dk5_dk68_lrt30_current_epoching_2s256/ssdi/run_p
   --fs 256 --fres 256 --pmax 30 --criterion LRT --regmode LWR \
   --dimensions 1 2 3 4 5 6 7 8 9 10 \
   --runs 100 --pre-iters 10000 --final-iters 10000 \
-  --workers "${WORKERS}"
+  --workers "${WORKERS}" --parallel-axis starts "${EXTRA_ARGS[@]}"

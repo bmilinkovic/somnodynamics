@@ -4,7 +4,23 @@ import numpy as np
 from scipy.linalg import cholesky, solve_triangular
 
 
-def cak2ddx(l, cak):
+def prepare_proxy(cak):
+    """Arrange the CAK slices and cache their sum of outer products.
+
+    This changes only the order of matrix multiplication in the proxy
+    calculation; every CAK lag remains in the sum.
+    """
+    q = np.ascontiguousarray(np.moveaxis(np.asarray(cak, float), 2, 0))
+    n = q.shape[1]
+    flat = np.ascontiguousarray(q.transpose(1, 0, 2)).reshape(n, -1)
+    return q, flat @ flat.T
+
+
+def cak2ddx(l, cak, prepared=None):
+    if prepared is not None:
+        q, gram = prepared
+        projected = np.matmul(l.T, q @ l)
+        return float(np.sum(l * (gram @ l)) - np.sum(projected*projected))
     d = 0.0
     for k in range(cak.shape[2]):
         a = l.T @ cak[:, :, k]
@@ -13,8 +29,18 @@ def cak2ddx(l, cak):
     return float(d)
 
 
-def cak2ddxgrad(l, cak):
+def cak2ddxgrad(l, cak, prepared=None):
     p = l @ l.T
+    if prepared is not None:
+        q, gram = prepared
+        ql = q @ l
+        ltq = np.matmul(l.T, q)
+        g = (gram
+             - np.einsum("kmi,kmj->ij", ltq, ltq, optimize=True)
+             - np.einsum("kim,kjm->ij", ql, ql, optimize=True))
+        grad = 2*g @ l
+        grad -= p @ grad
+        return grad, float(np.sqrt(np.sum(grad*grad)))
     g = np.zeros((l.shape[0], l.shape[0]))
     for k in range(cak.shape[2]):
         q = cak[:, :, k]

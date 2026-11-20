@@ -1,8 +1,11 @@
 # Emergence Engine multiscale snapshot
 
-This is a copy of the standalone `multiscale/` package from
+The base snapshot of the standalone `multiscale/` package comes from
 [Emergence Engine](https://github.com/bmilinkovic/emergence-engine), commit
-`c9e9c7e16286f4b238a5dd8dc6c25703a895b216`.
+`c9e9c7e16286f4b238a5dd8dc6c25703a895b216`. The `objective.py`,
+`optimise.py`, and `parallel.py` files were updated from commit `adc6b05`
+to distribute optimisation starts across workers and speed up the exact
+proxy matrix calculation.
 
 The copy includes the package licence and source attribution. SomnoDynamics
 uses this local copy so a transfer of this repository to the cluster carries

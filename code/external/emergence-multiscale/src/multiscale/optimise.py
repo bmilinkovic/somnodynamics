@@ -4,7 +4,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from .model import orthonormalise, prepare_var, itransform_subspace
-from .objective import cak2ddx, cak2ddxgrad, canonical_band_objective_and_grad
+from .objective import (cak2ddx, cak2ddxgrad, canonical_band_objective_and_grad,
+                        prepare_proxy)
 
 
 @dataclass
@@ -29,31 +30,34 @@ def _tolerances(tol, proxy=False):
     return tuple(float(x) for x in tol)
 
 
-def _pre_single(cak, initial, niters, gdes, sig0, gdls, tol, history):
+def _pre_single(cak, initial, niters, gdes, sig0, gdls, tol, history,
+                prepared=None):
     """Direct SSDI-1 opt_gd{1,2}_ddx update order and convergence tests."""
     if gdes not in (1, 2):
         raise ValueError("gdes must be 1 or 2")
     increase, decrease = _factors(gdls)
     stol, dtol, gtol = _tolerances(tol, proxy=True)
+    if prepared is None:
+        prepared = prepare_proxy(cak)
     l = initial.copy()
-    gmat, g = cak2ddxgrad(l, cak)
-    dd = cak2ddx(l, cak)
+    gmat, g = cak2ddxgrad(l, cak, prepared)
+    dd = cak2ddx(l, cak, prepared)
     sig = sig0
     hist = [[dd, sig, g]] if history else None
     conv, iters = 0, 1
     for iters in range(2, niters+1):
         trial = orthonormalise(l-sig*gmat/g)
-        ddnew = cak2ddx(trial, cak)
+        ddnew = cak2ddx(trial, cak, prepared)
         if gdes == 2:
             l = trial
-            gmat, g = cak2ddxgrad(l, cak)
+            gmat, g = cak2ddxgrad(l, cak, prepared)
             if ddnew < dd:
                 dd, sig = ddnew, increase*sig
             else:
                 sig = decrease*sig
         elif ddnew < dd:
             l, dd = trial, ddnew
-            gmat, g = cak2ddxgrad(l, cak)
+            gmat, g = cak2ddxgrad(l, cak, prepared)
             sig = increase*sig
         else:
             sig = decrease*sig
@@ -107,11 +111,8 @@ def _final_single(h, freqs, idx, initial, niters, sig0, gdls, tol, history):
     return dd, l, conv, iters, sig, np.asarray(hist) if history else None
 
 
-def _multirun(initial, run):
-    initial = np.asarray(initial, float)
-    if initial.ndim == 2:
-        initial = initial[:, :, None]
-    results = [run(initial[:, :, k]) for k in range(initial.shape[2])]
+def _assemble_runs(results):
+    """Sort completed starts exactly as the serial optimiser does."""
     order = np.argsort([r[0] for r in results], kind="stable")
     ordered = [results[i] for i in order]
     return Optimisation(np.array([r[0] for r in ordered]),
@@ -122,10 +123,18 @@ def _multirun(initial, run):
                         [r[5] for r in ordered])
 
 
+def _multirun(initial, run):
+    initial = np.asarray(initial, float)
+    if initial.ndim == 2:
+        initial = initial[:, :, None]
+    return _assemble_runs([run(initial[:, :, k]) for k in range(initial.shape[2])])
+
+
 def opt_gd_ddx_mruns(cak, initial, niters=10000, gdes=2, sig0=1.0,
                       gdls=2.0, tol=1e-10, history=False):
+    prepared = prepare_proxy(cak)
     return _multirun(initial, lambda l: _pre_single(cak, l, niters, gdes, sig0,
-                                                     gdls, tol, history))
+                                                     gdls, tol, history, prepared))
 
 
 def canonical_opt_dds_mruns(h, freqs, band_idx, initial, niters=10000,

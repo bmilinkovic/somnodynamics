@@ -51,6 +51,12 @@ def stage_from_token(token: str) -> str | None:
     return token if token in ("N1", "N2", "N3") else None
 
 
+def subject_stage_seed(seed: int, subject: str, stage: str) -> int:
+    """Give each subject-stage a stable, distinct random-start stream."""
+    payload = f"{seed}:{subject}:{stage}".encode("utf-8")
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "little")
+
+
 def discover(source_root: Path) -> list[tuple[str, str, Path]]:
     """Find and uniquely identify subject-stage source files."""
     jobs = {}
@@ -181,6 +187,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subject", help="Run only one EPCTL subject")
     parser.add_argument("--stage", choices=STAGES, help="Run only one sleep stage")
     parser.add_argument("--max-files", type=int, help="Limit selected files for a trial run")
+    parser.add_argument("--pilot-block", metavar="DIMENSION:BAND",
+                        help="Run just this block with full-grid settings and save its checkpoint")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--required-regions", type=int, default=68)
     parser.add_argument("--fs", type=float, default=256)
@@ -195,6 +203,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pre-iters", type=int, default=10000)
     parser.add_argument("--final-iters", type=int, default=10000)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--parallel-axis", choices=("starts", "blocks"),
+                        default="starts",
+                        help="Spread workers across starts within one macro-band block, or across blocks")
     parser.add_argument("--seed", type=int, default=0)
     return parser.parse_args()
 
@@ -269,6 +280,16 @@ def run_one(subject: str, stage: str, source: Path, args: argparse.Namespace,
                  for m, band in pairs}
         completed = {pair for pair, path in paths.items() if path.exists()}
         pending = [pair for pair in pairs if pair not in completed]
+        pilot_block = getattr(args, "pilot_block", None)
+        if pilot_block is not None:
+            try:
+                m_text, band = pilot_block.split(":", 1)
+                pilot_pair = (int(m_text), band)
+            except (ValueError, TypeError) as exc:
+                raise ValueError("pilot-block must be DIMENSION:BAND") from exc
+            if pilot_pair not in paths:
+                raise ValueError(f"pilot block {pilot_block!r} is not in the full grid")
+            pending = [pilot_pair] if pilot_pair not in completed else []
         print(f"[{subject} {stage}] order={order}; "
               f"{len(completed)}/{len(pairs)} DD blocks already complete", flush=True)
 
@@ -283,14 +304,25 @@ def run_one(subject: str, stage: str, source: Path, args: argparse.Namespace,
                   f"m={m} band={band} "
                   f"best={float(np.min(block['final'].values)):.8g}", flush=True)
 
+        def start_progress(m, band, phase, done, total):
+            if done == 1 or done % 10 == 0 or done == total:
+                print(f"[{subject} {stage}] m={m} band={band} "
+                      f"{phase} starts {done}/{total}", flush=True)
+
         if pending:
             run_grid_parallel(
                 a, v, args.fs, args.fres, args.dimensions, bands,
                 runs=args.runs,
-                seed=args.seed + sum(map(ord, subject + stage)), workers=args.workers,
+                seed=subject_stage_seed(args.seed, subject, stage), workers=args.workers,
                 pre_iters=args.pre_iters, final_iters=args.final_iters,
                 pairs=pending, progress=progress,
+                parallel_axis=args.parallel_axis, start_progress=start_progress,
             )
+        if pilot_block is not None:
+            print(f"[{subject} {stage}] pilot checkpoint saved; "
+                  f"{len(completed) + len(pending)}/{len(pairs)} DD blocks complete",
+                  flush=True)
+            return checkpoint_dir
         result = {
             "meta": {
                 "subject_id": subject, "stage": stage,

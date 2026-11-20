@@ -87,12 +87,16 @@ repository root:
 
 ```bash
 mkdir -p hpc/logs
-sbatch --array=0-0 hpc/submit_ssdi_dk68_lrt30.sh
+pilot_job=$(sbatch --parsable --array=0-0 \
+  --export=ALL,SSDI_PILOT_BLOCK=10:beta hpc/submit_ssdi_dk68_lrt30.sh)
+echo "Pilot job: ${pilot_job}"
 ```
 
-This first task is a pilot: inspect its log, selected VAR order, memory use
-and wall time. Once it finishes satisfactorily, submit the full array and
-summary:
+This pilot runs all 100 starts for the macro dimension 10, beta-band block of
+the first subject-stage, with the full 10-dimension × 5-band configuration and
+the same random starts the later full run will use. It saves a block checkpoint
+without writing an incomplete final result. Inspect its log, memory use, and
+wall time. Once it finishes satisfactorily, submit the full array and summary:
 
 ```bash
 mkdir -p hpc/logs
@@ -104,11 +108,15 @@ squeue -j "${dd_job},${summary_job}"
 
 The array has 143 zero-based tasks and runs one task at a time by default,
 keeping this analysis on one node. Each task loads one subject-stage VAR model
-and optimises its 50 dimension × band blocks. The runner checks that all 143
+and optimises its 50 dimension × band blocks in sequence. Within a block,
+it distributes the 100 random starts over 50 workers, normally in two waves.
+The runner checks that all 143
 model files are present before starting and skips existing Python result files
 on resubmission.
 If a task stops part-way through, it reuses its fitted VAR model and finished
 dimension–band checkpoints on the next submission.
+The full run also reuses the pilot block checkpoint; it does not repeat that
+optimisation.
 The summary job starts only after the array succeeds and checks for 143
 results. Logs in `hpc/logs/` show the VAR order and progress through the DD
 blocks. To allow multiple nodes, override the throttle at submission, for
@@ -130,11 +138,13 @@ sbatch hpc/submit_gc_dk68_lrt30.sh
 ## Resource Logic
 
 - Each Python DD array task requests 50 CPUs and 100 GB by default and can
-  share a node with other jobs. The 50 independent dimension × band blocks
-  use up to the allocated CPU count in Python worker processes.
+  share a node with other jobs. One dimension × band block runs at a time;
+  its random starts use up to the allocated CPU count in Python processes.
 - `SSDI_MAX_WORKERS` limits processes per array task; BLAS/OpenMP threads are
   capped at one to avoid oversubscription. A different CPU or memory request
   can be passed to `sbatch`; the worker default follows `SLURM_CPUS_PER_TASK`.
+- `SSDI_PILOT_BLOCK=DIMENSION:BAND` selects one block for a checkpointed pilot.
+  Do not set it for the full array.
 - LRT/LWR VAR fitting occurs locally before transfer. The proxy and
   canonical spectral optimisers run on the HPC for every requested block.
 - DK68 with 100 restarts and 10,000 iterations per stage is computationally

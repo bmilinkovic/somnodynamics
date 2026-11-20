@@ -19,6 +19,12 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PythonDDDK68Tests(unittest.TestCase):
+    def test_subject_stage_seeds_are_stable_and_distinct(self):
+        self.assertEqual(MODULE.subject_stage_seed(0, "EPCTL01", "W_"),
+                         MODULE.subject_stage_seed(0, "EPCTL01", "W_"))
+        self.assertNotEqual(MODULE.subject_stage_seed(0, "EPCTL01", "W_"),
+                            MODULE.subject_stage_seed(0, "EPCTL10", "W_"))
+
     def test_source_to_compatible_result(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -44,9 +50,14 @@ class PythonDDDK68Tests(unittest.TestCase):
             args = argparse.Namespace(
                 output_root=root / "results", required_regions=3, dimensions=[1],
                 pmax=2, criterion="LRT", regmode="LWR", fs=64, fres=16,
-                runs=2, pre_iters=4, final_iters=4, workers=1, seed=0,
-                overwrite=False)
+                runs=2, pre_iters=4, final_iters=4, workers=2, seed=0,
+                parallel_axis="starts", pilot_block="1:theta", overwrite=False)
             bands = {"delta": (2, 12), "theta": (14, 24)}
+            pilot = MODULE.run_one("EPCTL01", "W_", source, args, bands)
+            self.assertTrue((pilot / "theta_m1.npz").exists())
+            self.assertFalse((pilot / "delta_m1.npz").exists())
+            self.assertFalse((args.output_root / "W_/EPCTL01_ssdi_spectral_domain_results.mat").exists())
+            args.pilot_block = None
             path = MODULE.run_one("EPCTL01", "W_", source, args, bands)
             result = loadmat(path, simplify_cells=True)["results"]
             self.assertTrue(np.isfinite(np.asarray(result["delta_dopto_m1"])).all())
