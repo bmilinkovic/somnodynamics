@@ -102,15 +102,17 @@ echo "DK68 DD array: ${dd_job}; summary: ${summary_job}"
 squeue -j "${dd_job},${summary_job}"
 ```
 
-The array has 143 zero-based tasks and runs up to four tasks concurrently by
-default. Each task loads one subject-stage VAR model and optimises its 50
-dimension × band blocks. The runner checks that all 143 model files are
-present before starting and skips existing Python result files on resubmission.
+The array has 143 zero-based tasks and runs one task at a time by default,
+keeping this analysis on one node. Each task loads one subject-stage VAR model
+and optimises its 50 dimension × band blocks. The runner checks that all 143
+model files are present before starting and skips existing Python result files
+on resubmission.
 If a task stops part-way through, it reuses its fitted VAR model and finished
 dimension–band checkpoints on the next submission.
 The summary job starts only after the array succeeds and checks for 143
 results. Logs in `hpc/logs/` show the VAR order and progress through the DD
-blocks. To use one node at a time, submit with `sbatch --array=0-142%1 ...`.
+blocks. To allow multiple nodes, override the throttle at submission, for
+example with `sbatch --array=0-142%4 ...`.
 
 Python results are separate from the MATLAB archive under
 `$SOMNODYNAMICS_DATA_ROOT/results/ssdi/stage_ssdi_dk68_python_lrt30_current_epoching_2s_256hz`.

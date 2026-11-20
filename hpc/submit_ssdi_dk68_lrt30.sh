@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=50
 #SBATCH --mem=100G
 #SBATCH --time=14-00:00:00
-#SBATCH --array=0-142%4
+#SBATCH --array=0-142%1
 #SBATCH --output=hpc/logs/%x-%A_%a.out
 #SBATCH --error=hpc/logs/%x-%A_%a.err
 
